@@ -1,0 +1,483 @@
+PZMap API — Setup and Usage Guide
+
+This service provides a simple HTTP API around the existing PZMapCreation project.
+
+It does not replace or modify the existing GeoJSON/map-generation code.
+
+The API accepts three GeoJSON files:
+
+    buildings.geojson
+
+    roads.geojson
+
+    area.geojson
+
+    it finds those files in
+
+    curl -X POST \
+    http://localhost:8080/api/maps \
+    -F "buildings=@$HOME/pzgis/buildings.geojson" \
+    -F "roads=@$HOME/pzgis/roads.geojson" \
+    -F "area=@$HOME/pzgis/area.geojson" \
+    --output PZGisImport.zip
+
+
+It passes those files to the existing:
+
+java -cp out pzformat.Probe giscells
+
+command and returns the generated PZGisImport Project Zomboid mod as a ZIP file.
+1. Required Directory Layout
+
+The existing PZMapCreation repository should remain at:
+
+~/Documents/PZMapCreation
+
+The API project can be placed alongside it:
+
+~/Documents/
+├── PZMapCreation/
+│   ├── src/
+│   ├── out/
+│   └── ...
+│
+└── pz-map-api/
+    ├── app.py
+    ├── requirements.txt
+    └── .venv/
+
+The Project Zomboid installation should be available at:
+
+$PZ
+
+with its media directory at:
+
+$PZ/media
+
+The GIS GeoJSON files can live anywhere, but the recommended location is:
+
+~/pzgis/
+├── buildings.geojson
+├── roads.geojson
+└── area.geojson
+
+The API does not require the files to remain in ~/pzgis/ when making an API request. They are uploaded to the API, which creates temporary copies for the generation process.
+2. GeoJSON Files
+
+The API expects three files.
+buildings.geojson
+
+Contains the building GIS data.
+
+Recommended location:
+
+~/pzgis/buildings.geojson
+
+roads.geojson
+
+Contains the road GIS data.
+
+Recommended location:
+
+~/pzgis/roads.geojson
+
+area.geojson
+
+Contains the area/boundary information used by the existing GIS generation process.
+
+Recommended location:
+
+~/pzgis/area.geojson
+
+Verify that they exist:
+
+ls -lh ~/pzgis/
+
+You should see:
+
+buildings.geojson
+roads.geojson
+area.geojson
+
+These are the files that will be uploaded to the API.
+3. PZMapCreation
+
+The API uses the existing PZMapCreation repository.
+
+Its location is:
+
+~/Documents/PZMapCreation
+
+The API expects the compiled Java classes to be in:
+
+~/Documents/PZMapCreation/out
+
+If out does not exist, compile PZMapCreation:
+
+cd ~/Documents/PZMapCreation
+
+rm -rf out
+mkdir out
+
+javac -d out (find src/main/java -name '*.java')
+
+Verify:
+
+ls out
+
+4. Verify PZMapCreation Directly
+
+Before using the API, it is useful to verify that the underlying map generator works.
+
+From:
+
+~/Documents/PZMapCreation
+
+run:
+
+java -cp out pzformat.Probe giscells \
+    ~/pzgis/buildings.geojson \
+    ~/pzgis/roads.geojson \
+    ~/pzgis/area.geojson \
+    "$PZ/media" \
+    ~/Zomboid/mods \
+    PZGisImport
+
+This is the existing PZMapCreation command.
+
+The API simply runs the equivalent command using temporary uploaded files.
+
+If this command works, the underlying map generation system is working.
+5. API Configuration
+
+The API uses environment variables for the locations of PZMapCreation and the Project Zomboid media directory.
+
+Because this setup uses fish shell, configure them with:
+
+set -x PZMAPCREATION "$HOME/Documents/PZMapCreation"
+set -x PZ_MEDIA "$PZ/media"
+
+Verify:
+
+echo $PZMAPCREATION
+echo $PZ_MEDIA
+
+Expected result:
+
+/home/your-user/Documents/PZMapCreation
+/home/your-user/.../ProjectZomboid/projectzomboid/media
+
+The PZ environment variable must already point to your Project Zomboid installation.
+
+Verify it with:
+
+echo $PZ
+
+6. API Python Environment
+
+Go to the API directory:
+
+cd ~/Documents/pz-map-api
+
+Create the Python virtual environment:
+
+python3 -m venv .venv
+
+Activate it in fish:
+
+source .venv/bin/activate.fish
+
+Install the dependencies:
+
+pip install fastapi "uvicorn[standard]" python-multipart
+
+If requirements.txt is being used instead, run:
+
+pip install -r requirements.txt
+
+7. Starting the API
+
+Make sure the environment variables are set:
+
+set -x PZMAPCREATION "$HOME/Documents/PZMapCreation"
+set -x PZ_MEDIA "$PZ/media"
+
+Activate the Python environment:
+
+source ~/Documents/pz-map-api/.venv/bin/activate.fish
+
+Start the API:
+
+cd ~/Documents/pz-map-api
+
+uvicorn app:app --host 0.0.0.0 --port 8080
+
+The API should report that it is running on:
+
+http://0.0.0.0:8080
+
+Leave this terminal running while using the API.
+8. Check API Health
+
+Open another terminal.
+
+Run:
+
+curl http://localhost:8080/health
+
+A successful response should contain:
+
+{
+    "status": "ok"
+}
+
+The response will also show the configured PZMapCreation and Project Zomboid media paths.
+
+If the health check fails, check:
+
+    PZMAPCREATION
+
+    PZ_MEDIA
+
+    ~/Documents/PZMapCreation/out
+
+    The Project Zomboid installation
+
+9. Generate a Map
+
+The API endpoint is:
+
+POST /api/maps
+
+It accepts three uploaded files:
+
+buildings
+roads
+area
+
+Using the recommended GeoJSON locations:
+
+curl -X POST \
+    http://localhost:8080/api/maps \
+    -F "buildings=@$HOME/pzgis/buildings.geojson" \
+    -F "roads=@$HOME/pzgis/roads.geojson" \
+    -F "area=@$HOME/pzgis/area.geojson" \
+    --output PZGisImport.zip
+
+The API will:
+
+    Receive the three GeoJSON files.
+
+    Create a temporary working directory.
+
+    Save the uploaded files there.
+
+    Invoke the existing PZMapCreation giscells command.
+
+    Generate PZGisImport.
+
+    ZIP the generated mod.
+
+    Return the ZIP to the client.
+
+    Remove the temporary working files.
+
+The original GeoJSON files in ~/pzgis/ are not modified.
+10. Check the Generated Map
+
+After the API request completes:
+
+ls -lh PZGisImport.zip
+
+Inspect the archive:
+
+unzip -l PZGisImport.zip
+
+The ZIP should contain the generated:
+
+PZGisImport/
+
+mod structure.
+
+You can extract it with:
+
+unzip PZGisImport.zip
+
+11. Complete Start-to-Finish Procedure
+
+For a normal map-generation session:
+Terminal 1 — Start API
+
+set -x PZMAPCREATION "$HOME/Documents/PZMapCreation"
+set -x PZ_MEDIA "$PZ/media"
+
+cd ~/Documents/pz-map-api
+source .venv/bin/activate.fish
+
+uvicorn app:app --host 0.0.0.0 --port 8080
+
+Terminal 2 — Verify inputs
+
+ls -lh ~/pzgis/
+
+Confirm:
+
+buildings.geojson
+roads.geojson
+area.geojson
+
+Terminal 2 — Generate map
+
+curl -X POST \
+    http://localhost:8080/api/maps \
+    -F "buildings=@$HOME/pzgis/buildings.geojson" \
+    -F "roads=@$HOME/pzgis/roads.geojson" \
+    -F "area=@$HOME/pzgis/area.geojson" \
+    --output PZGisImport.zip
+
+Terminal 2 — Inspect result
+
+unzip -l PZGisImport.zip
+
+The resulting:
+
+PZGisImport.zip
+
+is the generated Project Zomboid map/mod deliverable.
+12. How the System Works
+
+The API is deliberately just a wrapper around the existing PZMapCreation functionality.
+
+The complete flow is:
+
+~/pzgis/
+    │
+    ├── buildings.geojson
+    ├── roads.geojson
+    └── area.geojson
+             │
+             │ HTTP upload
+             ▼
+      ┌─────────────────┐
+      │     FastAPI     │
+      │     app.py      │
+      └────────┬────────┘
+               │
+               │ temporary files
+               ▼
+      ┌─────────────────────┐
+      │    PZMapCreation    │
+      │                     │
+      │ pzformat.Probe      │
+      │       giscells      │
+      └──────────┬──────────┘
+                 │
+                 │ existing
+                 │ map generation
+                 ▼
+          PZGisImport/
+                 │
+                 ▼
+          PZGisImport.zip
+                 │
+                 ▼
+             API client
+
+The existing PZMapCreation code is responsible for processing the GIS data and creating the Project Zomboid map.
+
+The API is responsible only for:
+
+    accepting files
+
+    creating temporary files/directories
+
+    invoking PZMapCreation
+
+    collecting the generated mod
+
+    returning the ZIP
+
+13. Important Paths
+Purpose	Path
+PZMapCreation source	~/Documents/PZMapCreation
+PZMapCreation Java source	~/Documents/PZMapCreation/src/main/java/pzformat/
+PZMapCreation compiled classes	~/Documents/PZMapCreation/out/
+API	~/Documents/pz-map-api/
+API application	~/Documents/pz-map-api/app.py
+Python environment	~/Documents/pz-map-api/.venv/
+GIS input directory	~/pzgis/
+Buildings	~/pzgis/buildings.geojson
+Roads	~/pzgis/roads.geojson
+Area	~/pzgis/area.geojson
+Project Zomboid install	$PZ
+Project Zomboid media	$PZ/media
+Existing generated mods	~/Zomboid/mods/
+Generated mod name	PZGisImport
+14. The Important Command
+
+If you ever need to bypass the API and run PZMapCreation directly, this is the command:
+
+java -cp out pzformat.Probe giscells \
+    ~/pzgis/buildings.geojson \
+    ~/pzgis/roads.geojson \
+    ~/pzgis/area.geojson \
+    "$PZ/media" \
+    ~/Zomboid/mods \
+    PZGisImport
+
+The API does the same thing, except the three GeoJSON paths point to temporary uploaded files and the output goes to a temporary directory.
+15. Changing the GeoJSON Files
+
+To generate a different map, replace the files in:
+
+~/pzgis/
+
+with the new:
+
+buildings.geojson
+roads.geojson
+area.geojson
+
+Then make the same API request:
+
+curl -X POST \
+    http://localhost:8080/api/maps \
+    -F "buildings=@$HOME/pzgis/buildings.geojson" \
+    -F "roads=@$HOME/pzgis/roads.geojson" \
+    -F "area=@$HOME/pzgis/area.geojson" \
+    --output PZGisImport.zip
+
+The API does not care where the GeoJSON files originally came from. It simply uploads them to the existing giscells processing pipeline.
+16. Current Scope
+
+This setup is intended as a simple local API wrapper.
+
+It does not currently provide:
+
+    authentication
+
+    persistent job storage
+
+    a database
+
+    a job queue
+
+    multiple simultaneous generation jobs
+
+    cloud storage
+
+    automatic deployment
+
+    a web UI
+
+Those can be added later if needed.
+
+For the current use case, the entire process is:
+
+Upload 3 GeoJSON files
+        ↓
+PZMapCreation
+        ↓
+PZGisImport.zip
+
+The existing PZMapCreation project remains unchanged.
